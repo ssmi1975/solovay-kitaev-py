@@ -71,14 +71,6 @@ class Uop:
     def clone(self):
         return copy.deepcopy(self)
 
-    def __lt__(self, other):
-        for left, right in zip(self.v, other.v):
-            if left < right - EPS:
-                return True
-            elif right + EPS < left:
-                return False
-        return False
-
     def matrix_form(self):
         i, x, y, z = self.v
         return np.array([[i+z*1j, y+x*1j], [-y+x*1j, i-z*1j]])
