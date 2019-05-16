@@ -84,6 +84,7 @@ class Uop:
         return np.array([[i+z*1j, y+x*1j], [-y+x*1j, i-z*1j]])
 
     def __matmul__(self, other):
+        # see Nielsen & Chuang, Exercise 4.15 (1)
         i1, x1, y1, z1 = self.v
         i2, x2, y2, z2 = other.v
         ni = i1*i2 - x1*x2 - y1*y2 - z1*z2
@@ -103,7 +104,7 @@ class Uop:
         return Uop(self.i, -self.x, -self.y, -self.z, self.hierarchy, ncon, self.buildFlag)
 
     def __str__(self):
-        nn = sum((value ** 0.5 for value in self.v[1:]))
+        #nn = sum((value ** 0.5 for value in self.v[1:]))
         return """ ****
 #T gate : {self.hierarchy}
 {self.v[0]} I + {self.v[1]} iX + {self.v[2]} iY + {self.v[3]} iZ
@@ -183,7 +184,42 @@ def generate_epsilon_network():
             if c.hierarchy < MAX_HIERARCHY:
                 result.add(c)
     return result
-                
+
+
+def gc_decompose(udd):
+    # udd = Rn(θ)
+    s = ((1 - udd.i) / 2) ** 0.25   # sin Φ = ((1 - cos θ) / 2) ** (1/4)
+    c = (1 - s ** 2) ** 0.5         # cos Φ  = 1 - sin Φ
+    v = Uop(c, s, 0, 0, 0, [], False)   # v = cosΦ I - i sinΦ X = Rx(Φ)
+    w = Uop(c, 0, s, 0, 0, [], False)   # v = cosΦ I - i sinΦ Y = Ry(Φ)
+
+    # n = (nx, ny, nz)
+    nn = (1 - udd.i ** 2) ** 0.5
+    nx = udd.x / nn
+    ny = udd.y / nn
+    nz = udd.z / nn
+
+    mn = nn # ??
+    mx = 2 * s ** 3 * c / mn    # mx = 2 * sinΦ ** 3 * cosΦ
+    my = -2 * s ** 3 * c / mn
+    mz = -2 * s ** 2 * c ** 2 / mn
+
+    x = (nx + mx) / 2
+    y = (ny + my) / 2
+    z = (nz + mz) / 2
+    n = (x*x + y*y + z*z) ** 0.5
+    x /= n
+    y /= n
+    z /= n
+
+    s = Uop(0, x, y, z, 0, [], False)
+    vt = s @ v @ s.dagger()
+    wt = s @ w @ s.dagger()
+
+    return vt, wt
+
+
+
 def solovay_kitaev(uop_set, u, rec):
     """
     SK
@@ -218,30 +254,7 @@ def solovay_kitaev(uop_set, u, rec):
     ud = solovay_kitaev(uop_set, u, rec - 1)
     udd = u @ ud.dagger()
 
-    s = ((1 - udd.i) / 2) ** 0.25
-    c = (1 - s ** 2) ** 0.5
-    v = Uop(c, s, 0, 0, 0, [], False)
-    w = Uop(c, 0, s, 0, 0, [], False)
-
-    nn = (1 - udd.i ** 2) ** 0.5
-    nx = udd.x / nn
-    ny = udd.y / nn
-    nz = udd.z / nn
-    mn = nn # ??
-    mx = 2 * s ** 3 * c / mn
-    my = -2 * s ** 3 * c / mn
-    mz = -2 * s ** 2 * c ** 2 / mn
-    x = (nx + mx) / 2
-    y = (ny + my) / 2
-    z = (nz + mz) / 2
-    n = (x*x + y*y + z*z) ** 0.5
-    x /= n
-    y /= n
-    z /= n
-
-    s = Uop(0, x, y, z, 0, [], False)
-    vt = s @ v @ s.dagger()
-    wt = s @ w @ s.dagger()
+    vt, wt = gc_decompose(udd)
 
     vd = solovay_kitaev(uop_set, vt, rec - 1)
     wd = solovay_kitaev(uop_set, wt, rec - 1)
