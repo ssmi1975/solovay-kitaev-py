@@ -17,20 +17,13 @@ TID = 9
 # allowed number of T-gate in epsilon net
 MAX_HIERARCHY = 3
 
-# maximum recursive number of Solovay-Kitaev
-MAX_RECURSIVE_SK = 10
-
-# If ture, normalize when unitary operator is defined
-NORMALIZE = True
-
-# If ture, print construction of gates with Clifford gates and T-gates.
-SHOW_CONSTRUCTION = False
 
 class Uop:
-    def __init__(self, i, x, y, z, hierarchy, construction, buildFlag=True, normalize=True):
+    def __init__(self, i, x, y, z, hierarchy=0, construction=[], normalize=True):
+        # U = iI + jxX + jyY + jzZ
+        #   = 0.5 * (cos(Φ/2)*I + j*sin(Φ/2)*(x*X + y*Y + z*Z) )
         self.hierarchy = hierarchy
         self.construction = construction
-        self.buildFlag = buildFlag
         self.v = (i, x, y, z)
         self._fixup_direction()
         if normalize:
@@ -51,6 +44,32 @@ class Uop:
             if v < 0:
                 self.v = tuple((-value for value in self.v))
                 break
+
+    @staticmethod
+    def from_matrix(matrix, hierarchy=0, construction=[], normalize=True):
+        assert len(matrix) == 2 and len(matrix[0]) == 2
+        i = (matrix[0][0] + matrix[1][1]) / 2
+        x = (matrix[0][1] + matrix[1][0]) / 2j
+        y = (matrix[0][1] - matrix[1][0]) / 2
+        z = (matrix[0][0] - matrix[1][1]) / 2j
+        # fix phase
+        print((i, x, y, z))
+        i, x, y, z = Uop._fix_phase((i, x, y, z))
+        print((i, x, y, z))
+
+        return Uop(i, x, y, z, hierarchy, construction, True)
+
+    @staticmethod
+    def _fix_phase(values):
+        c = 1.0
+        # find the first non-real value and get the conjugate
+        for v in values:
+            if - EPS < abs(v) < EPS:
+                continue
+            if v.imag < -EPS or EPS < v.imag:
+                c = v.conjugate()
+                break
+        return [(v*c).real for v in values]
 
     @property
     def i(self):
@@ -83,7 +102,7 @@ class Uop:
         nx = i1*x2 + x1*i2 - y1*z2 + z1*y2
         ny = i1*y2 + x1*z2 + y1*i2 - z1*x2
         nz = i1*z2 - x1*y2 + y1*x2 + z1*i2
-        return Uop(ni, nx, ny, nz, self.hierarchy + other.hierarchy, self.construction + other.construction, self.buildFlag & other.buildFlag)
+        return Uop(ni, nx, ny, nz, self.hierarchy + other.hierarchy, self.construction + other.construction)
 
     def dagger(self):
         ncon = []
@@ -93,18 +112,17 @@ class Uop:
                 ncon += [1, TID, 1]
             else:
                 ncon.append(DAG_ID[c])
-        return Uop(self.i, -self.x, -self.y, -self.z, self.hierarchy, ncon, self.buildFlag)
+        return Uop(self.i, -self.x, -self.y, -self.z, self.hierarchy, ncon)
 
     def __str__(self):
-        #nn = sum((value ** 0.5 for value in self.v[1:]))
-        return """ ****
-#T gate : {self.hierarchy}
-{self.v[0]} I + {self.v[1]} iX + {self.v[2]} iY + {self.v[3]} iZ
-rot = {rot}
- **** """.format(
-        self=self,
-        rot= 2 * math.acos(self.v[0])/math.pi
-    )
+        nn = math.sqrt(sum((value ** 2 for value in self.v[1:])))
+        return ("****\n"
+                "#T gate : {self.hierarchy}\n"
+                "{self.v[0]:f} I + {self.v[1]:f} iX + {self.v[2]:f} iY + {self.v[3]:f} iZ\n"
+                "rot = {rot:f}π, axis = ({axis})\n"
+                "****".format(self=self,
+                              rot= 2 * math.acos(self.v[0])/math.pi,
+                              axis=tuple((v/nn for v in self.v[1:]))))
 
     def set_clifford(self):
         """ create length24 list of [(u*C) for C in Clifford]
@@ -136,7 +154,6 @@ rot = {rot}
         u = self.matrix_form()
         v = other.matrix_form()
         values = np.linalg.eigvalsh(u-v)
-        #print(values)
         return values[-1] ** 0.5
 
     def get_similar(self, uop_list):
@@ -148,6 +165,15 @@ rot = {rot}
                 distance = dist
                 result = copy.deepcopy(u)
         return result
+    
+    def __repr__(self):
+        return  "Uop({self.i}, {self.x}, {self.y}, {self.z}, {self.hierarchy}, {self.construction})".format(self=self)
+    
+    def __eq__(self, other):
+        return (self.v == self.v
+         and self.construction == self.construction
+         and self.hierarchy == self.hierarchy)
+
 
 
 I = Uop(1, 0, 0, 0, 0, [])
@@ -180,12 +206,12 @@ def generate_epsilon_network():
 
 def gc_decompose(udd):
     # udd = Rn(θ)
-    s = ((1 - udd.i) / 2) ** 0.25   # sin Φ = ((1 - cos θ) / 2) ** (1/4)
+    s = ((1 - udd.i) / 2) ** 0.25
     c = (1 - s ** 2) ** 0.5         # cos Φ  = 1 - sin Φ
     v = Uop(c, s, 0, 0, 0, [], False)   # v = cosΦ I - i sinΦ X = Rx(Φ)
     w = Uop(c, 0, s, 0, 0, [], False)   # v = cosΦ I - i sinΦ Y = Ry(Φ)
 
-    # n = (nx, ny, nz)
+    # rotation axis n = (nx, ny, nz)
     nn = (1 - udd.i ** 2) ** 0.5
     nx = udd.x / nn
     ny = udd.y / nn
