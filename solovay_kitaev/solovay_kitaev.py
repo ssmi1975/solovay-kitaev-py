@@ -1,4 +1,3 @@
-import numpy as np
 import math
 import copy
 import collections
@@ -104,7 +103,7 @@ class Uop:
 
     def matrix_form(self):
         i, x, y, z = self.v
-        return np.array([[i+z*1j, y+x*1j], [-y+x*1j, i-z*1j]])
+        return [[i+z*1j, y+x*1j], [-y+x*1j, i-z*1j]]
 
     def __matmul__(self, other):
         # see Nielsen & Chuang, Exercise 4.15 (1)
@@ -146,8 +145,10 @@ class Uop:
             return (p + q + ((p - q)** 2 + 4 * r2) ** 0.5)/2
         u = self.matrix_form()
         v = other.matrix_form()
-        diff = u - v
-        values = [max_eigen_value(diff)]
+        for i in range(2):
+            for j in range(2):
+                u[i][j] -= v[i][j]
+        values = [max_eigen_value(u)]
         assert values[-1] >= 0, str(self)
         return values[-1] ** 0.5
 

@@ -1,1 +1,2 @@
-numpy
+# please see setup.cfg for dependencies
+.
