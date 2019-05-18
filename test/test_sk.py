@@ -1,11 +1,11 @@
-from solovay_kitaev import solovay_kitaev as sk
+from solovay_kitaev import solovay_kitaev, Uop, generate_epsilon_network
+import solovay_kitaev.algorithm as sk
 import math
 import pytest
 from math import sin, cos, pi, e
 
-Uop = sk.Uop
 SQRT2 = sk.SQRT2
-ERR = 10**-5
+ERR = 10**-12
 
 oI = Uop(1, 0, 0, 0, 0)
 oX = Uop(0, 1, 0, 0, 0, ['X'])
@@ -50,8 +50,8 @@ def verify_construction(u):
 
 def check_sk(target, count, expected):
     print(target)
-    s = sk.generate_epsilon_network(3)
-    result = sk.solovay_kitaev(s, target, count)
+    s = generate_epsilon_network(3)
+    result = solovay_kitaev(s, target, count)
     print(result)
     print("dist: {}".format(result.operator_distance(target)))
     assert expected == result.construction_str()

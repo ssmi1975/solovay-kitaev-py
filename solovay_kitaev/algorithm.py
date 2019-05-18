@@ -200,7 +200,7 @@ def clifford_set(u):
     return result
 
 
-def generate_epsilon_network(max_hierarchy, ordering=True):
+def generate_epsilon_network(max_hierarchy=3, ordering=True):
     result = clifford_set(I)
     queue = collections.deque(result)
     current_hierarchy = 0
