@@ -199,7 +199,7 @@ def clifford_set(u):
     return result
 
 
-def generate_epsilon_network(max_hierarchy):
+def generate_epsilon_network(max_hierarchy, ordering=True):
     result = clifford_set(I)
     queue = collections.deque(result)
     current_hierarchy = 0
@@ -222,6 +222,12 @@ def generate_epsilon_network(max_hierarchy):
             result.append(c)
             if c.hierarchy < max_hierarchy:
                 queue.append(c)
+    
+    if ordering:
+        # keep the same order as the original C++ code
+        from operator import attrgetter
+        result = sorted(result, key=attrgetter('i', 'x', 'y', 'z'))
+
     return result
 
 

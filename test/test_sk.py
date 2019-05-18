@@ -48,18 +48,31 @@ def verify_construction(u):
     assert u.construction == from_construction[-1].construction
     assert u.is_similar(from_construction[-1]), "approximate: {}, from_construction: {}".format(u, from_construction[-1])
 
+def check_sk(target, count, expected):
+    print(target)
+    s = sk.generate_epsilon_network(3)
+    result = sk.solovay_kitaev(s, target, count)
+    print(result)
+    print("dist: {}".format(result.operator_distance(target)))
+    assert expected == result.construction_str()
+
 @pytest.mark.parametrize("count, expected",(
         [0, "T"],
         [1, "(I+iY)T(I-iY)(I+iX)T(I-iY)(I-iZ)(I+iY)XTX(I-iY)(I+iZ)(I+iY)XTX(I-iX)T"],
+        [2, "T(I+iX)T(I+iX)TXT(I+iY)T(I+iX)TZXXTX(I-iX)XTX(I-iX)XTXZXTX(I-iX)XTX(I-iY)XTX(I+iY)T(I+iX)T(I+iY)T(I+iX)(I+iZ)(I+iY)T(I-iY)(I+iY)T(I+iY)T(I+iX)T(I+iY)Z(I+iY)XTX(I-iY)Z(I-iY)XTX(I-iX)XTX(I-iY)XTX(I-iY)(I+iX)T(I+iX)T(I+iY)T(I+iY)(I-iZ)(I-iZ)(I-iX)XTX(I-iY)XTX(I-iX)XTX(I-iY)XXTXX(I+iY)XXTXX(I+iX)XXTXXZXXTXX(I+iX)XXTXX(I+iX)XXTXXXZXTX(I-iX)XTX(I-iY)XTXXXTX(I-iX)XTX(I-iX)XTX(I+iZ)(I-iY)XTX(I-iY)XTX(I-iX)XTX(I-iX)(I+iY)XXTXX(I+iY)XXTXX(I+iX)XXTXX(I+iY)Z(I+iY)XXTXX(I-iY)Z(I-iY)XTX(I-iX)XTX(I-iY)XTX(I-iY)(I+iY)XTX(I-iY)(I+iY)T(I-iY)(I+iX)T(I-iY)(I-iZ)(I+iY)XTX(I-iY)(I+iZ)(I+iY)XTX(I-iX)T"],
 ))
 def test(count, expected):
     t = sk.Uop(math.cos(math.pi / 16), 0, 0, math.sin(math.pi / 16))
-    print(t)
-    s = sk.generate_epsilon_network(3)
-    result = sk.solovay_kitaev(s, t, count)
-    print(result)
-    print("dist: {}".format(result.operator_distance(t)))
-    assert expected == result.construction_str()
+    check_sk(t, count, expected)
+
+@pytest.mark.parametrize("count, expected",(
+        [0, "T"],
+        [1, "(I+iY)T(I-iY)(I+iX)T(I-iY)(I-iZ)(I+iY)XTX(I-iY)(I+iZ)(I+iY)XTX(I-iX)T"],
+        [2, "T(I+iX)T(I+iX)TXT(I+iY)T(I+iX)TZXXTX(I-iX)XTX(I-iX)XTXZXTX(I-iX)XTX(I-iY)XTX(I+iY)T(I+iX)T(I+iY)T(I+iX)(I+iZ)(I+iY)T(I-iY)(I+iY)T(I+iY)T(I+iX)T(I+iY)Z(I+iY)XTX(I-iY)Z(I-iY)XTX(I-iX)XTX(I-iY)XTX(I-iY)(I+iX)T(I+iX)T(I+iY)T(I+iY)(I-iZ)(I-iZ)(I-iX)XTX(I-iY)XTX(I-iX)XTX(I-iY)XXTXX(I+iY)XXTXX(I+iX)XXTXXZXXTXX(I+iX)XXTXX(I+iX)XXTXXXZXTX(I-iX)XTX(I-iY)XTXXXTX(I-iX)XTX(I-iX)XTX(I+iZ)(I-iY)XTX(I-iY)XTX(I-iX)XTX(I-iX)(I+iY)XXTXX(I+iY)XXTXX(I+iX)XXTXX(I+iY)Z(I+iY)XXTXX(I-iY)Z(I-iY)XTX(I-iX)XTX(I-iY)XTX(I-iY)(I+iY)XTX(I-iY)(I+iY)T(I-iY)(I+iX)T(I-iY)(I-iZ)(I+iY)XTX(I-iY)(I+iZ)(I+iY)XTX(I-iX)T"],
+))
+def test_from_matrix():
+    t = sk.Uop.from_matrix([[1, 0],[0, math.e ** (math.pi / 8 + 1j)]])
+    check_sk(t, count, expected)
 
 
 @pytest.mark.parametrize("matrix, expected",[
