@@ -199,6 +199,37 @@ def clifford_set(u):
 
     return result
 
+def generate_epsilon_network_ht(length=17):
+    H = Uop.from_matrix([[1, 1],[1, -1]], 0, ['H'], True)
+    T = Uop.from_matrix([[1, 0],[0, math.e**(1j*math.pi/4)]], 0, ['T'], True)
+    def _generate(result, length):
+        if length == 1:
+            result.append(Uop(1, 0, 0, 0))
+            result.append(H)
+            result.append(T)
+            return
+        _generate(result, length - 1)
+        new_results = []
+        for u in result:
+            if len(u.construction) < length - 1:
+                continue
+            if u.construction[-1] == 'H':
+                # avoid H*H = I
+                new_results.append(u @ T)
+            else:
+                new_results.append(u @ H)
+                if not (len(u.construction) >= 7 and u.construction[-7:] == [T] * 7):
+                    # avoid T ** 8 = I
+                    new_results.append(u @ T)
+        for n in new_results:
+            if any(n.is_similar(u) for u in result):
+                continue
+            result.append(n)
+        return
+    result = []
+    _generate(result, length)
+    return result
+
 
 def generate_epsilon_network(max_hierarchy=3, ordering=True):
     result = clifford_set(I)

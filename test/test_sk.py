@@ -17,6 +17,7 @@ oZ = Uop(0, 0, 0, 1, 0, ['Z'])
 osZ = Uop(1 / SQRT2, 0, 0, 1 / SQRT2, 0, ['(I+iZ)'])
 osZd = Uop(1 / SQRT2, 0, 0, -1 / SQRT2, 0, ['(I-iZ)'])
 T = Uop(cos(pi/8.), 0, 0, sin(pi/8.), 0, ['T'])
+H = Uop.from_matrix([[1, 1],[1, -1]], 0, ['H'])
 gates = {"I": oI,
         "X": oX,
         "(I+iX)": osX,
@@ -99,6 +100,29 @@ def test_matrix_form(args):
     # Hadamard -> 
     u = sk.Uop(*args)
     assert u == sk.Uop.from_matrix(u.matrix_form())
+
+
+@pytest.mark.parametrize("iteration,expected",(
+    [1, [oI, H, T]],
+    [2, [oI, H, T, H@T, T@H, T@T]],
+    [3, [oI, H, T, H@T, T@H, T@T, H@T@H, H@T@T, T@H@T, T@T@H, T@T@T]],
+))
+def test_epsilon_ht(iteration, expected):
+    assert expected == sk.generate_epsilon_network_ht(iteration)
+
+def test_sk_ht():
+    target = sk.Uop(math.cos(math.pi / 16), 0, 0, math.sin(math.pi / 16))
+    s = sk.generate_epsilon_network_ht(16)
+    import pprint
+    pprint.pprint(s)
+    for i in range(5):
+        result = solovay_kitaev(s, target, i)
+        print(f"\niteration: {i}")
+        print(result)
+        print(f"dist: {result.operator_distance(target)}")
+        print(f"gates: {len(result.construction)}")
+        print(f"gates: {result.construction_str()}")
+    assert False
 
 
 if __name__ == "__main__":
