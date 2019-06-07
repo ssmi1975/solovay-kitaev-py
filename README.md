@@ -14,3 +14,11 @@ python3 -m venv venv
 . venv/bin/activate
 python setup.py test
 ```
+
+Execute notebook
+================
+```
+pip install jupyter
+jupyter notebook demo.ipynb
+
+```

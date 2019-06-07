@@ -1,40 +1,44 @@
 import math
 import copy
 import collections
+import functools
 
-# direct translation from https://github.com/kodack64/SolovayKitaevAlg
+# most of the code are translated from https://github.com/kodack64/SolovayKitaevAlg
 
 EPS = 1e-12
-SQRT2 = 2 ** 0.5
-ALPHA = (2 + SQRT2) ** 0.5 / 2
-BETA = (2 - SQRT2) ** 0.5 / 2
-GATESTR = ("I","X","(I+iX)","(I-iX)","(I+iY)","(I-iY)","Z","(I+iZ)","(I-iZ)","T", "H")
-DAGGERS = {
-    "I": ("I",),
-    "X": ("X",),
-    "Y": ("Y",),
-    "Z": ("Z",),
-    "(I+iX)": ("(I-iX)",),
-    "(I-iX)": ("(I+iX)",),
-    "(I+iY)": ("(I-iY)",),
-    "(I-iY)": ("(I+iY)",),
-    "(I+iZ)": ("(I-iZ)",),
-    "(I-iZ)": ("(I+iZ)",),
-    "T": ("X", "T", "X"),
-    "H": ("H",),
-}
 
-# allowed number of T-gate in epsilon net
-MAX_HIERARCHY = 3
+# XXX : any better way to impelement strategy pattern?
+class GateSet:
+    def __init__(self, valid_construction, get_dagger, epsilon_net):
+        self._valid_construction = valid_construction
+        self._get_dagger = get_dagger
+        self._epsilon_net = epsilon_net
+
+    def is_valid_construction(self, gate):
+        return self._valid_construction(self, gate)
+
+    def get_dagger(self, gate):
+        return self._get_dagger(self, gate)
+
+    def epsilon_net(self):
+        return self._epsilon_net(self)
+
+
+NULL_GATESET = GateSet(
+    lambda self, gate: True,
+    lambda self, gate: "",
+    lambda self: []
+)
 
 
 class Uop:
-    def __init__(self, i, x, y, z, hierarchy=0, construction=[], normalize=True):
+    def __init__(self, i, x, y, z, hierarchy=0, construction=[], normalize=True, gateset=NULL_GATESET):
         # U = iI + jxX + jyY + jzZ
         #   = 0.5 * (cos(Φ/2)*I + j*sin(Φ/2)*(x*X + y*Y + z*Z) )
         self.hierarchy = hierarchy
         self.construction = construction
         self.v = (i, x, y, z)
+        self.gateset = gateset
         if self._needs_fixup_direction():
             self.v = tuple((-value for value in self.v))
         if normalize:
@@ -45,7 +49,7 @@ class Uop:
             assert 1 -EPS < sum((v**2 for v in self.v)) < 1 + EPS
         assert type(self.construction) == list
         for c in self.construction:
-            assert c in GATESTR, "bad construction: %s" % self.construction
+            assert self.gateset.is_valid_construction(c), f"bad construction {c} in {self.construction}"
 
     def _needs_fixup_direction(self):
         """to omit double-counting in SU(2), every variable is inverted if the first non-zero value is negative"""
@@ -59,7 +63,7 @@ class Uop:
         return False
 
     @staticmethod
-    def from_matrix(matrix, hierarchy=0, construction=[], normalize=True):
+    def from_matrix(matrix, hierarchy=0, construction=[], normalize=True, gateset=NULL_GATESET):
         assert len(matrix) == 2 and len(matrix[0]) == 2
         i = (matrix[0][0] + matrix[1][1]) / 2
         x = (matrix[0][1] + matrix[1][0]) / 2j
@@ -68,7 +72,7 @@ class Uop:
         # fix phase
         i, x, y, z = Uop._fix_phase((i, x, y, z))
 
-        return Uop(i, x, y, z, hierarchy, construction, True)
+        return Uop(i, x, y, z, hierarchy, construction, True, gateset=gateset)
 
     @staticmethod
     def _fix_phase(values):
@@ -113,13 +117,13 @@ class Uop:
         nx = i1*x2 + x1*i2 - y1*z2 + z1*y2
         ny = i1*y2 + x1*z2 + y1*i2 - z1*x2
         nz = i1*z2 - x1*y2 + y1*x2 + z1*i2
-        return Uop(ni, nx, ny, nz, self.hierarchy + other.hierarchy, self.construction + other.construction)
+        return Uop(ni, nx, ny, nz, self.hierarchy + other.hierarchy, self.construction + other.construction, gateset=self.gateset)
 
     def dagger(self):
         ncon = []
         for c in reversed(self.construction):
-            ncon += DAGGERS[c]
-        return Uop(self.i, -self.x, -self.y, -self.z, self.hierarchy, ncon)
+            ncon += self.gateset.get_dagger(c)
+        return Uop(self.i, -self.x, -self.y, -self.z, self.hierarchy, ncon, gateset=self.gateset)
 
     def __str__(self):
         nn = math.sqrt(sum((value ** 2 for value in self.v[1:])))
@@ -177,98 +181,12 @@ class Uop:
         return True
 
 
-I = Uop(1, 0, 0, 0, 0, [])
-
-def clifford_set(u):
-    """ create length24 list of [(u*C) for C in Clifford]
-    Clifford can be constructed with product((I,iX,I+iX,I-iX,I+iY,I-iY) , (I,iZ,I+iZ,I-iZ))"""
-    i, x, y, z = u.v
-    result = []
-    result.append(u.clone()) # I
-    result.append(Uop(-x, i, -z, y, u.hierarchy, u.construction + ["X"])) # iX, but treat it as X due to only phase difference
-    result.append(Uop((i-x)/SQRT2, (x+i)/SQRT2, (y-z)/SQRT2, (z+y)/SQRT2, u.hierarchy, u.construction + ["(I+iX)"]))
-    result.append(Uop((i+x)/SQRT2, (x-i)/SQRT2, (y+z)/SQRT2, (z-y)/SQRT2, u.hierarchy, u.construction + ["(I-iX)"]))
-    result.append(Uop((i-y)/SQRT2, (x+z)/SQRT2, (y+i)/SQRT2, (z-x)/SQRT2, u.hierarchy, u.construction + ["(I+iY)"]))
-    result.append(Uop((i+y)/SQRT2, (x-z)/SQRT2, (y-i)/SQRT2, (z+x)/SQRT2, u.hierarchy, u.construction + ["(I-iY)"]))
-    for idx in range(6):
-        i, x, y, z = result[idx].v
-        c = result[idx].construction[-1:] if idx != 0 else []
-        result.append(Uop(-z, -y, x, i, u.hierarchy, u.construction + c + ["Z"])) # iZ
-        result.append(Uop((i-z)/SQRT2, (x-y)/SQRT2, (y+x)/SQRT2, (z+i)/SQRT2, u.hierarchy, u.construction + c + ["(I+iZ)"]))
-        result.append(Uop((i+z)/SQRT2, (x+y)/SQRT2, (y-x)/SQRT2, (z-i)/SQRT2, u.hierarchy, u.construction + c + ["(I-iZ)"]))
-
-    return result
-
-def generate_epsilon_network_ht(length=17):
-    H = Uop.from_matrix([[1, 1],[1, -1]], 0, ['H'], True)
-    T = Uop.from_matrix([[1, 0],[0, math.e**(1j*math.pi/4)]], 0, ['T'], True)
-    def _generate(result, length):
-        if length == 1:
-            result.append(Uop(1, 0, 0, 0))
-            result.append(H)
-            result.append(T)
-            return
-        _generate(result, length - 1)
-        new_results = []
-        for u in result:
-            if len(u.construction) < length - 1:
-                continue
-            if u.construction[-1] == 'H':
-                # avoid H*H = I
-                new_results.append(u @ T)
-            else:
-                new_results.append(u @ H)
-                if not (len(u.construction) >= 7 and u.construction[-7:] == [T] * 7):
-                    # avoid T ** 8 = I
-                    new_results.append(u @ T)
-        for n in new_results:
-            if any(n.is_similar(u) for u in result):
-                continue
-            result.append(n)
-        return
-    result = []
-    _generate(result, length)
-    return result
-
-
-def generate_epsilon_network(max_hierarchy=3, ordering=True):
-    result = clifford_set(I)
-    queue = collections.deque(result)
-    current_hierarchy = 0
-
-    while len(queue) > 0:
-        u = queue.popleft()
-        i, x, y, z = u.v
-        ti = i*ALPHA - z*BETA
-        tx = x*ALPHA - y*BETA
-        ty = y*ALPHA + x*BETA
-        tz = z*ALPHA + i*BETA
-
-        circuits = clifford_set(Uop(ti, tx, ty, tz, u.hierarchy + 1, u.construction + ["T"]))
-        if u.hierarchy + 1 > current_hierarchy:
-            current_hierarchy += 1
-
-        for c in circuits:
-            if any((c.is_similar(o) for o in result)):
-                continue
-            result.append(c)
-            if c.hierarchy < max_hierarchy:
-                queue.append(c)
-    
-    if ordering:
-        # keep the same order as the original C++ code
-        from operator import attrgetter
-        result = sorted(result, key=attrgetter('i', 'x', 'y', 'z'))
-
-    return result
-
-
 def gc_decompose(udd):
     # udd = Rn(θ)
     s = ((1 - udd.i) / 2) ** 0.25
     c = (1 - s ** 2) ** 0.5         # cos Φ  = 1 - sin Φ
-    v = Uop(c, s, 0, 0, 0, [], False)   # v = cosΦ I - i sinΦ X = Rx(Φ)
-    w = Uop(c, 0, s, 0, 0, [], False)   # v = cosΦ I - i sinΦ Y = Ry(Φ)
+    v = Uop(c, s, 0, 0, 0, [], False, gateset=udd.gateset)   # v = cosΦ I - i sinΦ X = Rx(Φ)
+    w = Uop(c, 0, s, 0, 0, [], False, gateset=udd.gateset)   # v = cosΦ I - i sinΦ Y = Ry(Φ)
 
     # rotation axis n = (nx, ny, nz)
     nn = (1 - udd.i ** 2) ** 0.5
@@ -289,7 +207,7 @@ def gc_decompose(udd):
     y /= n
     z /= n
 
-    s = Uop(0, x, y, z, 0, [], False)
+    s = Uop(0, x, y, z, 0, [], False, gateset=udd.gateset)
     vt = s @ v @ s.dagger()
     wt = s @ w @ s.dagger()
 
@@ -336,3 +254,8 @@ def solovay_kitaev(uop_set, u, rec):
     vd = solovay_kitaev(uop_set, vt, rec - 1)
     wd = solovay_kitaev(uop_set, wt, rec - 1)
     return vd @ wd @ vd.dagger() @ wd.dagger() @ ud
+
+
+def execute_solovay_kitaev(u, rec):
+    uop_set = u.gateset.epsilon_net()
+    return solovay_kitaev(uop_set, u, rec)
