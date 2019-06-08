@@ -28,7 +28,6 @@ def clifford_set(u):
     return result
 
 CLIFFORD_DAGGERS = {
-    "I": ("I",),
     "X": ("X",),
     "Y": ("Y",),
     "Z": ("Z",),
@@ -75,11 +74,23 @@ def generate_epsilon_network(gateset, max_hierarchy=3, ordering=True):
     return result
 
 
+def simplify_gates(gateset, constructions):
+    result = []
+    first, second, third = None, None, None
+    for c in constructions:
+        first, second, third = c, first, second
+        if first == 'X' and second == 'X':
+            continue
+        result.append(first)
+    return result
+
 def clifford_gateset(depth=3):
     return GateSet(
-        lambda self, gate: gate in ("I", "X", "(I+iX)", "(I-iX)",
-                              "(I+iY)", "(I-iY)", "Z", "(I+iZ)", "(I-iZ)", "T", "H"),
+        lambda self, gate: gate in ("X", "(I+iX)", "(I-iX)",
+                              "(I+iY)", "(I-iY)", "Z", "(I+iZ)", "(I-iZ)", "T"),
         lambda self, gate: CLIFFORD_DAGGERS[gate],
-        functools.partial(generate_epsilon_network, max_hierarchy=depth)
+        functools.partial(generate_epsilon_network, max_hierarchy=depth),
+        #lambda self, constructions: simplify_gates(self, constructions)
+        lambda self, constructions: constructions
     )
 

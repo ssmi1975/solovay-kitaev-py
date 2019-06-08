@@ -1,6 +1,7 @@
 from solovay_kitaev import execute_solovay_kitaev, Uop
 import solovay_kitaev.algorithm as sk
 import solovay_kitaev.clifford as cl
+import solovay_kitaev.ht as ht
 import math
 import pytest
 from math import sin, cos, pi, e
@@ -17,8 +18,8 @@ osYd = Uop(1 / SQRT2, 0, -1 / SQRT2, 0, 0, ['(I-iY)'])
 oZ = Uop(0, 0, 0, 1, 0, ['Z'])
 osZ = Uop(1 / SQRT2, 0, 0, 1 / SQRT2, 0, ['(I+iZ)'])
 osZd = Uop(1 / SQRT2, 0, 0, -1 / SQRT2, 0, ['(I-iZ)'])
-T = Uop(cos(pi/8.), 0, 0, sin(pi/8.), 0, ['T'])
-H = Uop.from_matrix([[1, 1],[1, -1]], 0, ['H'])
+T = Uop(cos(pi/8.), 0, 0, sin(pi/8.), 0, ['T'], gateset=ht.ht_gateset())
+H = Uop.from_matrix([[1, 1],[1, -1]], 0, ['H'], gateset=ht.ht_gateset())
 gates = {"I": oI,
         "X": oX,
         "(I+iX)": osX,
@@ -84,7 +85,6 @@ def test_from_matrix():
     ([[1,1],[1,-1]], (0, 1/SQRT2, 0, 1/SQRT2)),  # Hadamard
 ])
 def test_from_matrix(matrix, expected):
-    # Hadamard -> 
     u = sk.Uop.from_matrix(matrix)
     for i in range(4):
         assert expected[i] - ERR < u.v[i] < expected[i] + ERR
@@ -97,33 +97,30 @@ def test_from_matrix(matrix, expected):
     (0, 1/SQRT2, 0, 1/SQRT2),  # Hadamard
 ])
 def test_matrix_form(args):
-    # Hadamard -> 
     u = sk.Uop(*args)
     assert u == sk.Uop.from_matrix(u.matrix_form())
 
 
-@pytest.mark.skip()
+
 @pytest.mark.parametrize("iteration,expected",(
     [1, [oI, H, T]],
     [2, [oI, H, T, H@T, T@H, T@T]],
     [3, [oI, H, T, H@T, T@H, T@T, H@T@H, H@T@T, T@H@T, T@T@H, T@T@T]],
 ))
 def test_epsilon_ht(iteration, expected):
-    assert expected == sk.generate_epsilon_network_ht(iteration)
+    gs = ht.ht_gateset()
+    print(ht.generate_epsilon_network(gs, iteration))
+    assert len(expected) == len(ht.generate_epsilon_network(gs, iteration))
+    assert set(expected) == set(ht.generate_epsilon_network(gs, iteration))
 
-@pytest.mark.skip()
 def test_sk_ht():
-    target = sk.Uop(math.cos(math.pi / 16), 0, 0, math.sin(math.pi / 16), cl.clifford_gateset())
-    s = sk.generate_epsilon_network_ht(16)
-    import pprint
-    pprint.pprint(s)
+    target = sk.Uop(math.cos(math.pi / 16), 0, 0, math.sin(math.pi / 16), gateset=ht.ht_gateset()) # pi/8
     for i in range(5):
         result = execute_solovay_kitaev(target, i)
         print(f"\niteration: {i}")
         print(result)
         print(f"dist: {result.operator_distance(target)}")
         print(f"gates: {len(result.construction)}")
-        print(f"gates: {result.construction_str()}")
     assert False
 
 

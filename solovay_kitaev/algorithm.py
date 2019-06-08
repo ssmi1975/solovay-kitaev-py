@@ -9,10 +9,11 @@ EPS = 1e-12
 
 # XXX : any better way to impelement strategy pattern?
 class GateSet:
-    def __init__(self, valid_construction, get_dagger, epsilon_net):
+    def __init__(self, valid_construction, get_dagger, epsilon_net, simplify):
         self._valid_construction = valid_construction
         self._get_dagger = get_dagger
         self._epsilon_net = epsilon_net
+        self._simplify = simplify
 
     def is_valid_construction(self, gate):
         return self._valid_construction(self, gate)
@@ -22,12 +23,16 @@ class GateSet:
 
     def epsilon_net(self):
         return self._epsilon_net(self)
+    
+    def simplify(self, constructions):
+        return self._simplify(self, constructions)
 
 
 NULL_GATESET = GateSet(
     lambda self, gate: True,
     lambda self, gate: "",
-    lambda self: []
+    lambda self: [],
+    lambda self, con: con
 )
 
 
@@ -117,12 +122,14 @@ class Uop:
         nx = i1*x2 + x1*i2 - y1*z2 + z1*y2
         ny = i1*y2 + x1*z2 + y1*i2 - z1*x2
         nz = i1*z2 - x1*y2 + y1*x2 + z1*i2
-        return Uop(ni, nx, ny, nz, self.hierarchy + other.hierarchy, self.construction + other.construction, gateset=self.gateset)
+        construction = self.gateset.simplify(self.construction + other.construction)
+        return Uop(ni, nx, ny, nz, self.hierarchy + other.hierarchy, construction, gateset=self.gateset)
 
     def dagger(self):
         ncon = []
         for c in reversed(self.construction):
             ncon += self.gateset.get_dagger(c)
+        ncon = self.gateset.simplify(ncon)
         return Uop(self.i, -self.x, -self.y, -self.z, self.hierarchy, ncon, gateset=self.gateset)
 
     def __str__(self):
